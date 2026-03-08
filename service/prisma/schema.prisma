@@ -1,0 +1,97 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id            String          @id @default(cuid())
+  email         String          @unique
+  passwordHash  String
+  createdAt     DateTime        @default(now())
+  messages      Message[]
+  tasks         Task[]
+  sources       WatchedSource[]
+  replies       Reply[]
+}
+
+enum Source {
+  whatsapp
+  slack
+}
+
+enum MessageStatus {
+  unread
+  read
+  converted
+  replied
+}
+
+model Message {
+  id          String        @id @default(cuid())
+  userId      String
+  user        User          @relation(fields: [userId], references: [id])
+  source      Source
+  externalId  String
+  senderName  String
+  content     String
+  receivedAt  DateTime      @default(now())
+  status      MessageStatus @default(unread)
+  threadRef   String?
+  task        Task?
+  taskId      String?       @unique
+  replies     Reply[]
+
+  @@unique([userId, source, externalId])
+}
+
+enum TaskStatus {
+  open
+  done
+}
+
+model Task {
+  id            String     @id @default(cuid())
+  userId        String
+  user          User       @relation(fields: [userId], references: [id])
+  title         String
+  notes         String?
+  sourceMessage Message?   @relation(fields: [sourceMsgId], references: [id])
+  sourceMsgId   String?    @unique
+  dueDate       DateTime?
+  status        TaskStatus @default(open)
+  createdAt     DateTime   @default(now())
+}
+
+model WatchedSource {
+  id          String  @id @default(cuid())
+  userId      String
+  user        User    @relation(fields: [userId], references: [id])
+  source      Source
+  externalId  String
+  displayName String
+  isActive    Boolean @default(true)
+
+  @@unique([userId, source, externalId])
+}
+
+enum ReplyStatus {
+  pending
+  sent
+  failed
+}
+
+model Reply {
+  id        String      @id @default(cuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id])
+  messageId String
+  message   Message     @relation(fields: [messageId], references: [id])
+  content   String
+  sentAt    DateTime?
+  status    ReplyStatus @default(pending)
+}
