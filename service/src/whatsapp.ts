@@ -7,7 +7,10 @@ import makeWASocket, {
 import { Boom } from '@hapi/boom'
 import { PrismaClient } from '@prisma/client'
 import path from 'path'
+import pino from 'pino'
+import { fileURLToPath } from 'url'
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const prisma = new PrismaClient()
 
 export async function startWhatsApp(): Promise<void> {
@@ -19,7 +22,7 @@ export async function startWhatsApp(): Promise<void> {
     version,
     auth: state,
     printQRInTerminal: true,
-    logger: require('pino')({ level: 'silent' }), // suppress noisy logs
+    logger: pino({ level: 'silent' }),
   })
 
   sock.ev.on('creds.update', saveCreds)

@@ -1,8 +1,8 @@
 import * as dotenv from 'dotenv'
 dotenv.config()
 
-import { startWhatsApp } from './whatsapp'
-import { startSlack } from './slack'
+import { startWhatsApp } from './whatsapp.js'
+import { startSlack } from './slack.js'
 
 async function main() {
   console.log('Death to Notifications — background service starting...')
