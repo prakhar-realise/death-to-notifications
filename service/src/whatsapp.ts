@@ -59,9 +59,11 @@ export async function startWhatsApp(): Promise<void> {
   })
 
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    console.log(`[WhatsApp] messages.upsert type=${type} count=${messages.length}`)
     if (type !== 'notify') return
 
     for (const msg of messages) {
+      console.log(`[WhatsApp] msg fromMe=${msg.key.fromMe} remoteJid=${msg.key.remoteJid} hasMessage=${!!msg.message}`)
       if (msg.key.fromMe) continue
       if (!msg.message) continue
 
@@ -69,12 +71,16 @@ export async function startWhatsApp(): Promise<void> {
       if (!rawJid) continue
       // Strip WhatsApp JID suffix so it matches stored phone numbers (e.g. "919876543210@s.whatsapp.net" → "919876543210")
       const senderId = rawJid.replace(/@s\.whatsapp\.net$|@g\.us$/, '')
+      console.log(`[WhatsApp] senderId=${senderId}`)
 
       const content =
         msg.message.conversation ||
         msg.message.extendedTextMessage?.text ||
         ''
-      if (!content) continue
+      if (!content) {
+        console.log(`[WhatsApp] skipping: no text content`)
+        continue
+      }
 
       await saveIfWatched({
         source: 'whatsapp',
@@ -104,6 +110,7 @@ async function saveIfWatched(params: {
   const watchedSources = await prisma.watchedSource.findMany({
     where: { source, externalId: senderId, isActive: true },
   })
+  console.log(`[WhatsApp] lookup source=${source} senderId=${senderId} → ${watchedSources.length} watched source(s)`)
 
   for (const ws of watchedSources) {
     await prisma.message.upsert({
