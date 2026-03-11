@@ -12,6 +12,10 @@ import { fileURLToPath } from 'url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const prisma = new PrismaClient()
 
+// Maps @lid IDs → phone numbers, populated from Baileys contact events.
+// WhatsApp now uses @lid (Linked Device IDs) instead of @s.whatsapp.net for many contacts.
+const lidToPhone = new Map<string, string>()
+
 export async function startWhatsApp(): Promise<void> {
   const authDir = path.join(__dirname, '../../auth_sessions/whatsapp')
   const { state, saveCreds } = await useMultiFileAuthState(authDir)
@@ -24,6 +28,18 @@ export async function startWhatsApp(): Promise<void> {
   })
 
   sock.ev.on('creds.update', saveCreds)
+
+  // Build lid → phone mapping from contact sync events
+  sock.ev.on('contacts.upsert', (contacts) => {
+    for (const contact of contacts) {
+      if (contact.lid && contact.id) {
+        const phone = contact.id.replace(/@s\.whatsapp\.net$/, '')
+        const lid = contact.lid.replace(/@lid$/, '')
+        lidToPhone.set(lid, phone)
+      }
+    }
+    console.log(`[WhatsApp] contacts.upsert: ${contacts.length} contacts, lid map size=${lidToPhone.size}`)
+  })
 
   sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
     if (qr) {
@@ -69,8 +85,24 @@ export async function startWhatsApp(): Promise<void> {
 
       const rawJid = msg.key.remoteJid
       if (!rawJid) continue
-      // Strip WhatsApp JID suffix so it matches stored phone numbers (e.g. "919876543210@s.whatsapp.net" → "919876543210")
-      const senderId = rawJid.replace(/@s\.whatsapp\.net$|@g\.us$/, '')
+
+      // Resolve @lid to phone number. WhatsApp uses @lid for multi-device contacts.
+      // Fall back to stripping the suffix if no mapping found.
+      let senderId: string
+      if (rawJid.endsWith('@lid')) {
+        const lidKey = rawJid.replace(/@lid$/, '')
+        const resolved = lidToPhone.get(lidKey)
+        if (resolved) {
+          senderId = resolved
+          console.log(`[WhatsApp] Resolved lid ${lidKey} → ${senderId}`)
+        } else {
+          senderId = lidKey
+          console.log(`[WhatsApp] No lid mapping for ${lidKey} (lid map size=${lidToPhone.size})`)
+        }
+      } else {
+        senderId = rawJid.replace(/@s\.whatsapp\.net$|@g\.us$/, '')
+      }
+
       console.log(`[WhatsApp] senderId=${senderId}`)
 
       const content =
