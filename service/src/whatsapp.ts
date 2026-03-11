@@ -2,7 +2,6 @@ import makeWASocket, {
   DisconnectReason,
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
-  proto,
 } from '@whiskeysockets/baileys'
 import { Boom } from '@hapi/boom'
 import { PrismaClient, WhatsAppStatus } from '@prisma/client'
