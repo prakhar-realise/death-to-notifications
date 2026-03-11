@@ -95,3 +95,18 @@ model Reply {
   sentAt    DateTime?
   status    ReplyStatus @default(pending)
 }
+
+enum WhatsAppStatus {
+  disconnected
+  qr_pending
+  connected
+}
+
+model WhatsAppSession {
+  id          String          @id @default("singleton")
+  status      WhatsAppStatus  @default(disconnected)
+  qrCode      String?
+  qrUpdatedAt DateTime?
+  connectedAt DateTime?
+  updatedAt   DateTime        @updatedAt
+}
