@@ -6,7 +6,7 @@ const { auth } = NextAuth(authConfig)
 
 export default auth((req) => {
   const isLoggedIn = !!req.auth
-  const isAuthPage = req.nextUrl.pathname.startsWith('/login')
+  const isAuthPage = req.nextUrl.pathname.startsWith('/login') || req.nextUrl.pathname.startsWith('/signup')
   const isApiAuth = req.nextUrl.pathname.startsWith('/api/auth')
 
   if (isApiAuth) return NextResponse.next()

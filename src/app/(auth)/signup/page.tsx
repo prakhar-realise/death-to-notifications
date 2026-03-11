@@ -1,11 +1,10 @@
 'use client'
 
-import { signIn } from 'next-auth/react'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
-export default function LoginPage() {
+export default function SignupPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -16,13 +15,22 @@ export default function LoginPage() {
     e.preventDefault()
     setError('')
     setLoading(true)
-    const result = await signIn('credentials', { email, password, redirect: false })
+
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    })
+
+    const data = await res.json()
     setLoading(false)
-    if (result?.error) {
-      setError('Invalid email or password')
-    } else {
-      router.push('/inbox')
+
+    if (!res.ok) {
+      setError(data.error ?? 'Something went wrong')
+      return
     }
+
+    router.push('/login')
   }
 
   const inputStyle: React.CSSProperties = {
@@ -59,7 +67,7 @@ export default function LoginPage() {
           Death to Notifications
         </h1>
         <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-40)', marginBottom: 'var(--space-6)' }}>
-          Sign in to your inbox
+          Create your account
         </p>
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
@@ -78,7 +86,7 @@ export default function LoginPage() {
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--color-ink-70)', marginBottom: 6 }}>
-              Password
+              Password <span style={{ color: 'var(--color-ink-40)', fontWeight: 400 }}>(min 8 chars)</span>
             </label>
             <input
               type="password"
@@ -86,6 +94,7 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               style={inputStyle}
               required
+              minLength={8}
             />
           </div>
 
@@ -110,13 +119,13 @@ export default function LoginPage() {
               width: '100%',
             }}
           >
-            {loading ? 'Signing in…' : 'Sign in'}
+            {loading ? 'Creating account…' : 'Create account'}
           </button>
         </form>
 
         <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-40)', marginTop: 'var(--space-4)', textAlign: 'center' }}>
-          No account?{' '}
-          <Link href="/signup" style={{ color: 'var(--color-accent)', textDecoration: 'none' }}>Sign up</Link>
+          Already have an account?{' '}
+          <Link href="/login" style={{ color: 'var(--color-accent)', textDecoration: 'none' }}>Sign in</Link>
         </p>
       </div>
     </div>
