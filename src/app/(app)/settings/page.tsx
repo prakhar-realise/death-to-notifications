@@ -102,6 +102,7 @@ export default function SettingsPage() {
     async function poll() {
       try {
         const res = await fetch('/api/whatsapp/status')
+        if (res.status === 401) return // session expired — stop polling
         if (res.ok) {
           const data: WAStatus = await res.json()
           if (!stopped) setWaStatus(data)
