@@ -98,10 +98,12 @@ model Reply {
 
 enum WhatsAppStatus {
   disconnected
-  qr_pending
+  pending
   connected
 }
 
+/// Singleton row — always access via upsert({ where: { id: "singleton" } }).
+/// Never use create() directly — this table must have exactly one row.
 model WhatsAppSession {
   id          String          @id @default("singleton")
   status      WhatsAppStatus  @default(disconnected)
