@@ -65,8 +65,10 @@ export async function startWhatsApp(): Promise<void> {
       if (msg.key.fromMe) continue
       if (!msg.message) continue
 
-      const senderId = msg.key.remoteJid
-      if (!senderId) continue
+      const rawJid = msg.key.remoteJid
+      if (!rawJid) continue
+      // Strip WhatsApp JID suffix so it matches stored phone numbers (e.g. "919876543210@s.whatsapp.net" → "919876543210")
+      const senderId = rawJid.replace(/@s\.whatsapp\.net$|@g\.us$/, '')
 
       const content =
         msg.message.conversation ||
