@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import { Plus } from 'lucide-react'
+import QRCode from 'react-qr-code'
 
 type Source = {
   id: string
@@ -74,6 +75,12 @@ const codeStyle: React.CSSProperties = {
   borderRadius: 'var(--radius-sm)',
 }
 
+type WAStatus = {
+  status: 'disconnected' | 'pending' | 'connected'
+  qrCode?: string
+  connectedAt?: string
+}
+
 export default function SettingsPage() {
   const { data: session } = useSession()
   const [sources, setSources] = useState<Source[]>([])
@@ -86,6 +93,29 @@ export default function SettingsPage() {
   }, [])
 
   useEffect(() => { fetchSources() }, [fetchSources])
+
+  const [waStatus, setWaStatus] = useState<WAStatus>({ status: 'disconnected' })
+
+  useEffect(() => {
+    let stopped = false
+
+    async function poll() {
+      try {
+        const res = await fetch('/api/whatsapp/status')
+        if (res.ok) {
+          const data: WAStatus = await res.json()
+          if (!stopped) setWaStatus(data)
+          if (data.status === 'connected') return // stop polling
+        }
+      } catch {
+        // network error — keep polling
+      }
+      if (!stopped) setTimeout(poll, 5000)
+    }
+
+    poll()
+    return () => { stopped = true }
+  }, [])
 
   async function addSource() {
     if (!form.externalId || !form.displayName) return
@@ -131,10 +161,39 @@ export default function SettingsPage() {
           <h2 style={sectionTitle}>Connections</h2>
           <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'var(--color-surface)', overflow: 'hidden' }}>
             <div style={{ padding: 'var(--space-4) var(--space-5)', borderBottom: '1px solid var(--color-border)' }}>
-              <p style={{ fontSize: 'var(--text-base)', fontWeight: 500, color: 'var(--color-ink-100)', marginBottom: 4 }}>WhatsApp</p>
-              <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-40)', lineHeight: 1.5 }}>
-                Scan the QR code in your terminal when you start the background service (<code style={codeStyle}>cd service && npm run dev</code>).
-              </p>
+              <p style={{ fontSize: 'var(--text-base)', fontWeight: 500, color: 'var(--color-ink-100)', marginBottom: 8 }}>WhatsApp</p>
+
+              {waStatus.status === 'connected' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
+                  <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-70)' }}>WhatsApp connected</span>
+                </div>
+              )}
+
+              {waStatus.status === 'pending' && waStatus.qrCode && (
+                <div>
+                  <div style={{
+                    display: 'inline-block',
+                    padding: 'var(--space-3)',
+                    background: '#fff',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid var(--color-border)',
+                    marginBottom: 'var(--space-3)',
+                  }}>
+                    <QRCode value={waStatus.qrCode} size={180} />
+                  </div>
+                  <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-40)', lineHeight: 1.6 }}>
+                    Open WhatsApp → Linked Devices → Link a Device → scan this code.
+                    The QR refreshes automatically.
+                  </p>
+                </div>
+              )}
+
+              {waStatus.status === 'disconnected' && (
+                <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-40)', lineHeight: 1.5 }}>
+                  Waiting for service to start…
+                </p>
+              )}
             </div>
             <div style={{ padding: 'var(--space-4) var(--space-5)' }}>
               <p style={{ fontSize: 'var(--text-base)', fontWeight: 500, color: 'var(--color-ink-100)', marginBottom: 4 }}>Slack</p>
