@@ -110,7 +110,7 @@ export async function startWhatsApp(): Promise<void> {
         msg.message.extendedTextMessage?.text ||
         ''
       if (!content) {
-        console.log(`[WhatsApp] skipping: no text content`)
+        console.log(`[WhatsApp] skipping: no text content. message keys=${Object.keys(msg.message).join(',')}`)
         continue
       }
 
