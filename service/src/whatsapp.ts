@@ -16,6 +16,39 @@ const prisma = new PrismaClient()
 // WhatsApp now uses @lid (Linked Device IDs) instead of @s.whatsapp.net for many contacts.
 const lidToPhone = new Map<string, string>()
 
+type PendingMessage = {
+  lidKey: string
+  msg: Parameters<typeof extractAndSave>[0]
+}
+
+// Messages that arrived before contacts synced — drained after contacts.upsert
+const pendingLidQueue: PendingMessage[] = []
+
+type WAMessage = {
+  key: { fromMe?: boolean | null; remoteJid?: string | null; id?: string | null; participant?: string | null }
+  message?: Record<string, unknown> | null
+  pushName?: string | null
+}
+
+async function extractAndSave(msg: WAMessage, senderId: string) {
+  const content =
+    (msg.message?.conversation as string | undefined) ||
+    (msg.message?.extendedTextMessage as { text?: string } | undefined)?.text ||
+    ''
+  if (!content) {
+    console.log(`[WhatsApp] skipping: no text content. message keys=${Object.keys(msg.message ?? {}).join(',')}`)
+    return
+  }
+  await saveIfWatched({
+    source: 'whatsapp',
+    externalId: msg.key.id!,
+    senderId,
+    senderName: msg.pushName || senderId,
+    content,
+    threadRef: msg.key.participant ?? undefined,
+  })
+}
+
 export async function startWhatsApp(): Promise<void> {
   const authDir = path.join(__dirname, '../../auth_sessions/whatsapp')
   const { state, saveCreds } = await useMultiFileAuthState(authDir)
@@ -29,8 +62,8 @@ export async function startWhatsApp(): Promise<void> {
 
   sock.ev.on('creds.update', saveCreds)
 
-  // Build lid → phone mapping from contact sync events
-  sock.ev.on('contacts.upsert', (contacts) => {
+  // Build lid → phone mapping from contact sync events, then drain queued messages
+  sock.ev.on('contacts.upsert', async (contacts) => {
     for (const contact of contacts) {
       if (contact.lid && contact.id) {
         const phone = contact.id.replace(/@s\.whatsapp\.net$/, '')
@@ -39,6 +72,21 @@ export async function startWhatsApp(): Promise<void> {
       }
     }
     console.log(`[WhatsApp] contacts.upsert: ${contacts.length} contacts, lid map size=${lidToPhone.size}`)
+
+    // Drain messages that arrived before contacts synced
+    if (pendingLidQueue.length > 0) {
+      const toProcess = pendingLidQueue.splice(0)
+      console.log(`[WhatsApp] Draining ${toProcess.length} pending lid message(s)`)
+      for (const { lidKey, msg } of toProcess) {
+        const phone = lidToPhone.get(lidKey)
+        if (phone) {
+          console.log(`[WhatsApp] Resolved queued lid ${lidKey} → ${phone}`)
+          await extractAndSave(msg, phone)
+        } else {
+          console.log(`[WhatsApp] Still unresolved after contacts sync: ${lidKey}`)
+        }
+      }
+    }
   })
 
   sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
@@ -86,42 +134,22 @@ export async function startWhatsApp(): Promise<void> {
       const rawJid = msg.key.remoteJid
       if (!rawJid) continue
 
-      // Resolve @lid to phone number. WhatsApp uses @lid for multi-device contacts.
-      // Fall back to stripping the suffix if no mapping found.
-      let senderId: string
       if (rawJid.endsWith('@lid')) {
         const lidKey = rawJid.replace(/@lid$/, '')
         const resolved = lidToPhone.get(lidKey)
         if (resolved) {
-          senderId = resolved
-          console.log(`[WhatsApp] Resolved lid ${lidKey} → ${senderId}`)
+          console.log(`[WhatsApp] Resolved lid ${lidKey} → ${resolved}`)
+          await extractAndSave(msg as WAMessage, resolved)
         } else {
-          senderId = lidKey
-          console.log(`[WhatsApp] No lid mapping for ${lidKey} (lid map size=${lidToPhone.size})`)
+          // Contacts haven't synced yet — queue and process after contacts.upsert
+          console.log(`[WhatsApp] Queuing unresolved lid ${lidKey} (lid map size=${lidToPhone.size})`)
+          pendingLidQueue.push({ lidKey, msg: msg as WAMessage })
         }
       } else {
-        senderId = rawJid.replace(/@s\.whatsapp\.net$|@g\.us$/, '')
+        const senderId = rawJid.replace(/@s\.whatsapp\.net$|@g\.us$/, '')
+        console.log(`[WhatsApp] senderId=${senderId}`)
+        await extractAndSave(msg as WAMessage, senderId)
       }
-
-      console.log(`[WhatsApp] senderId=${senderId}`)
-
-      const content =
-        msg.message.conversation ||
-        msg.message.extendedTextMessage?.text ||
-        ''
-      if (!content) {
-        console.log(`[WhatsApp] skipping: no text content. message keys=${Object.keys(msg.message).join(',')}`)
-        continue
-      }
-
-      await saveIfWatched({
-        source: 'whatsapp',
-        externalId: msg.key.id!,
-        senderId,
-        senderName: msg.pushName || senderId,
-        content,
-        threadRef: msg.key.participant || undefined,
-      })
     }
   })
 
